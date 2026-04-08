@@ -1,0 +1,38 @@
+name: Podarimo.si Monitor
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # Vsake 5 minut
+  workflow_dispatch:          # Možnost ročnega zagona
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4
+
+      - name: Run checker
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python check_ads.py
+
+      - name: Save seen ads
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add seen_ads.json
+          git diff --staged --quiet || git commit -m "update seen ads"
+          git push
