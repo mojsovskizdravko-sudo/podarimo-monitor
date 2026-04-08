@@ -29,11 +29,12 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python check_ads.py
 
-      - name: Save seen ads
+      -  name: Save seen ads
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase
           git add seen_ads.json
           git diff --staged --quiet || git commit -m "update seen ads"
+          git fetch origin main
+          git rebase origin/main
           git push
