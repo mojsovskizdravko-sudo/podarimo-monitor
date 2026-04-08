@@ -33,6 +33,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase
           git add seen_ads.json
           git diff --staged --quiet || git commit -m "update seen ads"
           git push
