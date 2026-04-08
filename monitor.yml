@@ -35,6 +35,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add seen_ads.json
           git diff --staged --quiet || git commit -m "update seen ads"
-          git fetch origin main
-          git rebase origin/main
-          git push
+          git push --force
+
