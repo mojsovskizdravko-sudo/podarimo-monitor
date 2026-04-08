@@ -1,49 +1,74 @@
 """
-Podarimo.si - Enkratni preverjalec novih oglasov (za GitHub Actions)
+Podarimo.si - Monitor novih oglasov
+Shranjuje stanje via GitHub API (brez git push problemov)
 """
 
+import base64
 import json
 import os
 import re
 import time
-from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
 
-TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
+TELEGRAM_TOKEN   = os.environ["TELEGRAM_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
+GITHUB_TOKEN     = os.environ["GITHUB_TOKEN"]
+GITHUB_REPO      = os.environ["GITHUB_REPOSITORY"]  # samodejno: "user/repo"
 
-SEEN_FILE = Path("seen_ads.json")
 BASE_URL = "https://www.podarimo.si"
+SEEN_FILE_PATH = "seen_ads.json"
 
-PAGES_TO_MONITOR = [
+PAGES = [
     f"{BASE_URL}/podarim/vsi-oglasi/stran-1",
 ]
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0 Safari/537.36"
+}
+
+GH_HEADERS = {
+    "Authorization": f"token {GITHUB_TOKEN}",
+    "Accept": "application/vnd.github.v3+json",
 }
 
 
-def load_seen() -> set:
-    if SEEN_FILE.exists():
-        with open(SEEN_FILE, "r", encoding="utf-8") as f:
-            return set(json.load(f))
-    return set()
+# ── GitHub API za shranjevanje seen_ads.json ──────────────────────────────────
+
+def load_seen():
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{SEEN_FILE_PATH}"
+    resp = requests.get(url, headers=GH_HEADERS, timeout=10)
+    if resp.status_code == 200:
+        data = resp.json()
+        content = base64.b64decode(data["content"]).decode("utf-8")
+        return set(json.loads(content)), data["sha"]
+    return set(), None
 
 
-def save_seen(seen: set):
-    with open(SEEN_FILE, "w", encoding="utf-8") as f:
-        json.dump(sorted(list(seen)), f)
+def save_seen(seen, sha):
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{SEEN_FILE_PATH}"
+    content = base64.b64encode(
+        json.dumps(sorted(list(seen)), ensure_ascii=False).encode("utf-8")
+    ).decode("utf-8")
+    body = {"message": "update seen ads", "content": content}
+    if sha:
+        body["sha"] = sha
+    resp = requests.put(url, headers=GH_HEADERS, json=body, timeout=10)
+    if resp.ok:
+        print(f"[*] seen_ads.json shranjen ({len(seen)} oglasov)")
+    else:
+        print(f"[!] Napaka pri shranjevanju: {resp.text}")
 
 
-def fetch_ads(url: str) -> list[dict]:
+# ── Scraping ──────────────────────────────────────────────────────────────────
+
+def fetch_ads(url):
     try:
         resp = requests.get(url, headers=HEADERS, timeout=15)
         resp.raise_for_status()
         resp.encoding = resp.apparent_encoding or "utf-8"
-    except requests.RequestException as e:
+    except Exception as e:
         print(f"[!] Napaka: {e}")
         return []
 
@@ -57,7 +82,7 @@ def fetch_ads(url: str) -> list[dict]:
         if not match:
             continue
         ad_id = match.group(1)
-        slug = match.group(2)
+        slug  = match.group(2)
         title = a.get("title") or a.get_text(strip=True) or slug.replace("-", " ")
         if title and len(title) > 2 and ad_id not in seen_ids:
             seen_ids.add(ad_id)
@@ -67,16 +92,14 @@ def fetch_ads(url: str) -> list[dict]:
     return ads
 
 
-def send_telegram(message: str):
+# ── Telegram ──────────────────────────────────────────────────────────────────
+
+def send_telegram(message):
     try:
         resp = requests.post(
             f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-            json={
-                "chat_id": TELEGRAM_CHAT_ID,
-                "text": message,
-                "parse_mode": "HTML",
-                "disable_web_page_preview": False,
-            },
+            json={"chat_id": TELEGRAM_CHAT_ID, "text": message,
+                  "parse_mode": "HTML", "disable_web_page_preview": False},
             timeout=10,
         )
         if not resp.ok:
@@ -85,20 +108,26 @@ def send_telegram(message: str):
         print(f"[!] Telegram ni dosegljiv: {e}")
 
 
+# ── Main ──────────────────────────────────────────────────────────────────────
+
 def main():
-    seen = load_seen()
-    first_run = not seen
+    print("Podarimo.si monitor — zaganjan")
+
+    seen, sha = load_seen()
+    first_run = len(seen) == 0
 
     all_ads = []
-    for page_url in PAGES_TO_MONITOR:
-        all_ads.extend(fetch_ads(page_url))
+    for page in PAGES:
+        all_ads.extend(fetch_ads(page))
+
+    print(f"[*] Najdenih {len(all_ads)} oglasov na strani")
 
     if first_run:
-        print(f"[*] Prvo zaganjanje — shranjujem {len(all_ads)} oglasov.")
+        print("[*] Prvo zaganjanje — shranjujem obstoječe oglase...")
         for ad in all_ads:
             seen.add(ad["id"])
-        save_seen(seen)
-        send_telegram("✅ Monitor zagnan! Posiljal ti bom nove oglase s podarimo.si 🎁")
+        save_seen(seen, sha)
+        send_telegram("✅ Podarimo.si monitor zagnan!\nPošiljal ti bom nove oglase. 🎁")
         return
 
     new_ads = [ad for ad in all_ads if ad["id"] not in seen]
@@ -108,10 +137,9 @@ def main():
         for ad in new_ads:
             seen.add(ad["id"])
             print(f"    * {ad['title'][:60]}")
-            msg = f"🎁 <b>Nov oglas na podarimo.si!</b>\n\n{ad['title'][:80]}\n\n{ad['url']}"
-            send_telegram(msg)
+            send_telegram(f"🎁 <b>Nov oglas na podarimo.si!</b>\n\n{ad['title'][:80]}\n\n{ad['url']}")
             time.sleep(1)
-        save_seen(seen)
+        save_seen(seen, sha)
     else:
         print("[~] Ni novih oglasov.")
 
