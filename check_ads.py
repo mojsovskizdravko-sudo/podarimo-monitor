@@ -34,7 +34,7 @@ GH_HEADERS = {
 }
 
 
-# ── GitHub API za shranjevanje seen_ads.json ──────────────────────────────────
+# ââ GitHub API za shranjevanje seen_ads.json ââââââââââââââââââââââââââââââââââ
 
 def load_seen():
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{SEEN_FILE_PATH}"
@@ -61,7 +61,7 @@ def save_seen(seen, sha):
         print(f"[!] Napaka pri shranjevanju: {resp.text}")
 
 
-# ── Scraping ──────────────────────────────────────────────────────────────────
+# ââ Scraping ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 def fetch_ads(url):
     try:
@@ -92,7 +92,7 @@ def fetch_ads(url):
     return ads
 
 
-# ── Telegram ──────────────────────────────────────────────────────────────────
+# ââ Telegram ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 def send_telegram(message):
     try:
@@ -108,10 +108,10 @@ def send_telegram(message):
         print(f"[!] Telegram ni dosegljiv: {e}")
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ââ Main ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 def main():
-    print("Podarimo.si monitor — zaganjan")
+    print("Podarimo.si monitor â zaganjan")
 
     seen, sha = load_seen()
     first_run = len(seen) == 0
@@ -123,11 +123,11 @@ def main():
     print(f"[*] Najdenih {len(all_ads)} oglasov na strani")
 
     if first_run:
-        print("[*] Prvo zaganjanje — shranjujem obstoječe oglase...")
+        print("[*] Prvo zaganjanje â shranjujem obstojeÄe oglase...")
         for ad in all_ads:
             seen.add(ad["id"])
         save_seen(seen, sha)
-        send_telegram("✅ Podarimo.si monitor zagnan!\nPošiljal ti bom nove oglase. 🎁")
+        send_telegram("â Podarimo.si monitor zagnan!\nPoÅ¡iljal ti bom nove oglase. ð")
         return
 
     new_ads = [ad for ad in all_ads if ad["id"] not in seen]
@@ -137,7 +137,7 @@ def main():
         for ad in new_ads:
             seen.add(ad["id"])
             print(f"    * {ad['title'][:60]}")
-            send_telegram(f"🎁 <b>Nov oglas na podarimo.si!</b>\n\n{ad['title'][:80]}\n\n{ad['url']}")
+            send_telegram(f"ð <b>Nov oglas na podarimo.si!</b>\n\n{ad['title'][:80]}\n\n{ad['url']}")
             time.sleep(1)
         save_seen(seen, sha)
     else:
@@ -146,3 +146,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# wake schedule v1782821083079
